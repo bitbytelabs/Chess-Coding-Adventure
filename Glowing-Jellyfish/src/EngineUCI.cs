@@ -74,6 +74,8 @@ public class EngineUCI
 		TrainingSummary summary = player.Train(gameCount, maxPly, AppDataPath);
 		Respond($"info string training finished (samples={summary.SampleCount}, whiteWins={summary.WhiteWins}, blackWins={summary.BlackWins}, draws={summary.Draws})");
 		Respond($"info string training data saved to {summary.OutputPath}");
+		Respond($"info string updated piece values pawn={summary.TrainedValues.PawnValue} knight={summary.TrainedValues.KnightValue} bishop={summary.TrainedValues.BishopValue} rook={summary.TrainedValues.RookValue} queen={summary.TrainedValues.QueenValue}");
+		Respond($"info string evaluation weights saved to {summary.WeightsPath}");
 	}
 
 	static int ParsePositiveInt(string[] parts, int index, int defaultValue)

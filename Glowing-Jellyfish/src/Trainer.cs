@@ -8,13 +8,15 @@ namespace GlowingJellyfish;
 
 public readonly struct TrainingSummary
 {
-	public TrainingSummary(int sampleCount, int whiteWins, int blackWins, int draws, string outputPath)
+	public TrainingSummary(int sampleCount, int whiteWins, int blackWins, int draws, string outputPath, string weightsPath, PieceValues trainedValues)
 	{
 		SampleCount = sampleCount;
 		WhiteWins = whiteWins;
 		BlackWins = blackWins;
 		Draws = draws;
 		OutputPath = outputPath;
+		WeightsPath = weightsPath;
+		TrainedValues = trainedValues;
 	}
 
 	public int SampleCount { get; }
@@ -22,6 +24,8 @@ public readonly struct TrainingSummary
 	public int BlackWins { get; }
 	public int Draws { get; }
 	public string OutputPath { get; }
+	public string WeightsPath { get; }
+	public PieceValues TrainedValues { get; }
 }
 
 public class Trainer
@@ -32,7 +36,9 @@ public class Trainer
 	{
 		Directory.CreateDirectory(outputDirectory);
 		string outputPath = Path.Combine(outputDirectory, "training-data.csv");
+		string weightsPath = Path.Combine(outputDirectory, "trained-piece-values.txt");
 		List<string> rows = new() { "fen,result" };
+		List<TrainingSample> samples = new();
 
 		int whiteWins = 0;
 		int blackWins = 0;
@@ -75,11 +81,17 @@ public class Trainer
 			foreach (string fen in fens)
 			{
 				rows.Add($"\"{fen}\",{label.ToString(CultureInfo.InvariantCulture)}");
+				samples.Add(CreateSample(fen, label));
 			}
 		}
 
 		File.WriteAllLines(outputPath, rows);
-		return new TrainingSummary(rows.Count - 1, whiteWins, blackWins, draws, outputPath);
+
+		PieceValues tunedValues = LearnPieceValues(samples);
+		EvaluationTuning.Apply(tunedValues);
+		EvaluationTuning.Save(weightsPath);
+
+		return new TrainingSummary(rows.Count - 1, whiteWins, blackWins, draws, outputPath, weightsPath, tunedValues);
 	}
 
 	Move ChooseMove(Board board)
@@ -93,22 +105,93 @@ public class Trainer
 			return Move.NullMove;
 		}
 
-		List<Move> captures = new();
+		if (random.NextDouble() < 0.25)
+		{
+			return moves[random.Next(moves.Length)];
+		}
+
+		Evaluation evaluation = new();
+		Move bestMove = moves[0];
+		int bestScore = int.MinValue;
+
 		for (int i = 0; i < moves.Length; i++)
 		{
 			Move move = moves[i];
-			if (!move.IsNull && Piece.PieceType(board.Square[move.TargetSquare]) != Piece.None)
+			board.MakeMove(move, inSearch: true);
+			int score = -evaluation.Evaluate(board);
+			board.UnmakeMove(move, inSearch: true);
+
+			if (score > bestScore)
 			{
-				captures.Add(move);
+				bestScore = score;
+				bestMove = move;
 			}
 		}
 
-		if (captures.Count > 0 && random.NextDouble() < 0.6)
+		return bestMove;
+	}
+
+	static TrainingSample CreateSample(string fen, double label)
+	{
+		Board position = Board.CreateBoard();
+		position.LoadPosition(fen);
+
+		int pawnDiff = position.Pawns[Board.WhiteIndex].Count - position.Pawns[Board.BlackIndex].Count;
+		int knightDiff = position.Knights[Board.WhiteIndex].Count - position.Knights[Board.BlackIndex].Count;
+		int bishopDiff = position.Bishops[Board.WhiteIndex].Count - position.Bishops[Board.BlackIndex].Count;
+		int rookDiff = position.Rooks[Board.WhiteIndex].Count - position.Rooks[Board.BlackIndex].Count;
+		int queenDiff = position.Queens[Board.WhiteIndex].Count - position.Queens[Board.BlackIndex].Count;
+
+		return new TrainingSample(pawnDiff, knightDiff, bishopDiff, rookDiff, queenDiff, label);
+	}
+
+	static PieceValues LearnPieceValues(List<TrainingSample> samples)
+	{
+		if (samples.Count == 0)
 		{
-			return captures[random.Next(captures.Count)];
+			return EvaluationTuning.Default;
 		}
 
-		return moves[random.Next(moves.Length)];
+		double pawnW = LearnWeight(samples, s => s.PawnDiff);
+		double knightW = LearnWeight(samples, s => s.KnightDiff);
+		double bishopW = LearnWeight(samples, s => s.BishopDiff);
+		double rookW = LearnWeight(samples, s => s.RookDiff);
+		double queenW = LearnWeight(samples, s => s.QueenDiff);
+
+		double pawnScale = Math.Abs(pawnW) < 1e-8 ? 1 : 100.0 / Math.Abs(pawnW);
+
+		int pawn = (int)Math.Round(Math.Abs(pawnW) * pawnScale);
+		int knight = (int)Math.Round(Math.Abs(knightW) * pawnScale);
+		int bishop = (int)Math.Round(Math.Abs(bishopW) * pawnScale);
+		int rook = (int)Math.Round(Math.Abs(rookW) * pawnScale);
+		int queen = (int)Math.Round(Math.Abs(queenW) * pawnScale);
+
+		if (knight == 0 || bishop == 0 || rook == 0 || queen == 0)
+		{
+			return EvaluationTuning.Default;
+		}
+
+		return new PieceValues(pawn, knight, bishop, rook, queen);
+	}
+
+	static double LearnWeight(List<TrainingSample> samples, Func<TrainingSample, int> selector)
+	{
+		double numerator = 0;
+		double denominator = 0;
+
+		foreach (TrainingSample sample in samples)
+		{
+			int feature = selector(sample);
+			numerator += feature * sample.Label;
+			denominator += feature * feature;
+		}
+
+		if (Math.Abs(denominator) < 1e-8)
+		{
+			return 0;
+		}
+
+		return numerator / denominator;
 	}
 
 	static double GetLabel(GameResult result)
@@ -122,5 +205,25 @@ public class Trainer
 			return -1;
 		}
 		return 0;
+	}
+
+	readonly struct TrainingSample
+	{
+		public TrainingSample(int pawnDiff, int knightDiff, int bishopDiff, int rookDiff, int queenDiff, double label)
+		{
+			PawnDiff = pawnDiff;
+			KnightDiff = knightDiff;
+			BishopDiff = bishopDiff;
+			RookDiff = rookDiff;
+			QueenDiff = queenDiff;
+			Label = label;
+		}
+
+		public int PawnDiff { get; }
+		public int KnightDiff { get; }
+		public int BishopDiff { get; }
+		public int RookDiff { get; }
+		public int QueenDiff { get; }
+		public double Label { get; }
 	}
 }
