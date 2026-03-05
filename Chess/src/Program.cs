@@ -1,4 +1,4 @@
-﻿namespace CodingAdventureBot;
+﻿namespace Glowing-Jellyfish;
 using Chess.Core;
 using System;
 using System.Collections.Generic;
