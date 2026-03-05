@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using static System.Math;
 
-namespace CodingAdventureBot;
+namespace GlowingJellyfish;
 
 public class Bot
 {

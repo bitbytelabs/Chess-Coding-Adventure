@@ -1,4 +1,4 @@
-﻿namespace Glowing-Jellyfish;
+namespace GlowingJellyfish;
 using Chess.Core;
 using System;
 using System.Collections.Generic;

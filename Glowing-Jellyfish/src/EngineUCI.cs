@@ -2,7 +2,7 @@
 using System;
 using System.IO;
 
-namespace CodingAdventureBot;
+namespace GlowingJellyfish;
 
 public class EngineUCI
 {
