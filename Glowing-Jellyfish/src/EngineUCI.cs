@@ -1,5 +1,6 @@
 ﻿using Chess.Core;
 using System;
+using System.Globalization;
 using System.IO;
 
 namespace GlowingJellyfish;
@@ -27,6 +28,9 @@ public class EngineUCI
 
 		switch (messageType)
 		{
+			case "train":
+				ProcessTrainCommand(message);
+				break;
 			case "uci":
 				Respond("uciok");
 				break;
@@ -58,6 +62,33 @@ public class EngineUCI
 				LogToFile($"Unrecognized command: {messageType}");
 				break;
 		}
+	}
+
+	void ProcessTrainCommand(string message)
+	{
+		string[] parts = message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+		int gameCount = ParsePositiveInt(parts, 1, 10);
+		int maxPly = ParsePositiveInt(parts, 2, 200);
+
+		Respond($"info string training started (games={gameCount}, maxPly={maxPly})");
+		TrainingSummary summary = player.Train(gameCount, maxPly, AppDataPath);
+		Respond($"info string training finished (samples={summary.SampleCount}, whiteWins={summary.WhiteWins}, blackWins={summary.BlackWins}, draws={summary.Draws})");
+		Respond($"info string training data saved to {summary.OutputPath}");
+	}
+
+	static int ParsePositiveInt(string[] parts, int index, int defaultValue)
+	{
+		if (parts.Length <= index)
+		{
+			return defaultValue;
+		}
+
+		if (int.TryParse(parts[index], NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) && parsed > 0)
+		{
+			return parsed;
+		}
+
+		return defaultValue;
 	}
 
 	void OnMoveChosen(string move)

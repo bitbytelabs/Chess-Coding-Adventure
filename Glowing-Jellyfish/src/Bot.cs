@@ -82,6 +82,13 @@ public class Bot
 		return (int)Ceiling(Max(minThinkTime, thinkTimeMs));
 	}
 
+
+	public TrainingSummary Train(int gameCount, int maxPly, string outputDirectory)
+	{
+		Trainer trainer = new();
+		return trainer.GenerateSelfPlayData(gameCount, maxPly, outputDirectory);
+	}
+
 	public void ThinkTimed(int timeMs)
 	{
 		LatestMoveIsBookMove = false;
