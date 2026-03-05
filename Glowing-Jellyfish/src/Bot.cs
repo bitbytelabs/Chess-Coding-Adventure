@@ -39,7 +39,7 @@ public class Bot
 		searcher = new Searcher(board);
 		searcher.OnSearchComplete += OnSearchComplete;
 
-		book = new OpeningBook(Chess_Coding_Adventure.Properties.Resources.Book);
+		book = new OpeningBook(GlowingJellyfish.Properties.Resources.Book);
 		searchWaitHandle = new(false);
 
 		Task.Factory.StartNew(SearchThread, TaskCreationOptions.LongRunning);
