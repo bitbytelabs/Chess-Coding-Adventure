@@ -35,7 +35,7 @@ You can use it directly in a UCI GUI like Arena, Cute Chess, or Banksia by point
 
 ## Training / Improving the engine
 
-This project is a classic handcrafted chess engine, not a neural-network model. The `train` command here generates self-play data; it does not perform neural-network optimization.
+This project is a classic handcrafted chess engine, not a neural-network model. The `train` command now runs lightweight self-play tuning and updates piece values used by evaluation.
 
 To improve strength, treat "training" as **tuning and benchmarking**:
 
@@ -55,8 +55,11 @@ Typical things to tune:
 
 In short: you do not train with datasets; you improve strength by iterative code changes + match testing.
 
-You can now also generate basic self-play training data directly from the app:
+You can now also generate self-play data and automatically tune piece values directly from the app:
 
 - Run the engine
 - Type `train` (or `train <games> <maxPly>`, for example `train 25 160`)
-- The engine will create a `training-data.csv` file in its app-data directory containing `fen,result` samples (`1` white win, `0` draw, `-1` black win).
+- The engine will create a `training-data.csv` file in the repository under `Glowing-Jellyfish/resources/training/` containing `fen,result` samples (`1` white win, `0` draw, `-1` black win).
+- It will also update and save `trained-piece-values.txt` in that same repository folder; these weights are loaded automatically on startup and used by search/evaluation.
+- Use `weights` to print the currently loaded piece values and weight file path.
+- If there are too few decisive games, training keeps weights close to previous values for stability.

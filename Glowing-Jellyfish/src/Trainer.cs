@@ -8,20 +8,26 @@ namespace GlowingJellyfish;
 
 public readonly struct TrainingSummary
 {
-	public TrainingSummary(int sampleCount, int whiteWins, int blackWins, int draws, string outputPath)
+	public TrainingSummary(int sampleCount, int whiteWins, int blackWins, int draws, int decisiveGames, string outputPath, string weightsPath, PieceValues trainedValues)
 	{
 		SampleCount = sampleCount;
 		WhiteWins = whiteWins;
 		BlackWins = blackWins;
 		Draws = draws;
+		DecisiveGames = decisiveGames;
 		OutputPath = outputPath;
+		WeightsPath = weightsPath;
+		TrainedValues = trainedValues;
 	}
 
 	public int SampleCount { get; }
 	public int WhiteWins { get; }
 	public int BlackWins { get; }
 	public int Draws { get; }
+	public int DecisiveGames { get; }
 	public string OutputPath { get; }
+	public string WeightsPath { get; }
+	public PieceValues TrainedValues { get; }
 }
 
 public class Trainer
@@ -32,11 +38,14 @@ public class Trainer
 	{
 		Directory.CreateDirectory(outputDirectory);
 		string outputPath = Path.Combine(outputDirectory, "training-data.csv");
+		string weightsPath = Path.Combine(outputDirectory, "trained-piece-values.txt");
 		List<string> rows = new() { "fen,result" };
+		List<TrainingSample> samples = new();
 
 		int whiteWins = 0;
 		int blackWins = 0;
 		int draws = 0;
+		int decisiveGames = 0;
 
 		for (int gameIndex = 0; gameIndex < gameCount; gameIndex++)
 		{
@@ -62,10 +71,12 @@ public class Trainer
 			if (label > 0)
 			{
 				whiteWins++;
+				decisiveGames++;
 			}
 			else if (label < 0)
 			{
 				blackWins++;
+				decisiveGames++;
 			}
 			else
 			{
@@ -75,11 +86,18 @@ public class Trainer
 			foreach (string fen in fens)
 			{
 				rows.Add($"\"{fen}\",{label.ToString(CultureInfo.InvariantCulture)}");
+				samples.Add(CreateSample(fen, label));
 			}
 		}
 
 		File.WriteAllLines(outputPath, rows);
-		return new TrainingSummary(rows.Count - 1, whiteWins, blackWins, draws, outputPath);
+
+		PieceValues tunedValues = LearnPieceValues(samples, decisiveGames, EvaluationTuning.Current);
+		EvaluationTuning.Apply(tunedValues);
+		PieceValues appliedValues = EvaluationTuning.Current;
+		EvaluationTuning.Save(weightsPath);
+
+		return new TrainingSummary(rows.Count - 1, whiteWins, blackWins, draws, decisiveGames, outputPath, weightsPath, appliedValues);
 	}
 
 	Move ChooseMove(Board board)
@@ -93,22 +111,120 @@ public class Trainer
 			return Move.NullMove;
 		}
 
-		List<Move> captures = new();
+		if (random.NextDouble() < 0.25)
+		{
+			return moves[random.Next(moves.Length)];
+		}
+
+		Evaluation evaluation = new();
+		Move bestMove = moves[0];
+		int bestScore = int.MinValue;
+
 		for (int i = 0; i < moves.Length; i++)
 		{
 			Move move = moves[i];
-			if (!move.IsNull && Piece.PieceType(board.Square[move.TargetSquare]) != Piece.None)
+			board.MakeMove(move, inSearch: true);
+			int score = -evaluation.Evaluate(board);
+			board.UnmakeMove(move, inSearch: true);
+
+			if (score > bestScore)
 			{
-				captures.Add(move);
+				bestScore = score;
+				bestMove = move;
 			}
 		}
 
-		if (captures.Count > 0 && random.NextDouble() < 0.6)
+		return bestMove;
+	}
+
+	static TrainingSample CreateSample(string fen, double label)
+	{
+		Board position = Board.CreateBoard();
+		position.LoadPosition(fen);
+
+		int pawnDiff = position.Pawns[Board.WhiteIndex].Count - position.Pawns[Board.BlackIndex].Count;
+		int knightDiff = position.Knights[Board.WhiteIndex].Count - position.Knights[Board.BlackIndex].Count;
+		int bishopDiff = position.Bishops[Board.WhiteIndex].Count - position.Bishops[Board.BlackIndex].Count;
+		int rookDiff = position.Rooks[Board.WhiteIndex].Count - position.Rooks[Board.BlackIndex].Count;
+		int queenDiff = position.Queens[Board.WhiteIndex].Count - position.Queens[Board.BlackIndex].Count;
+
+		return new TrainingSample(pawnDiff, knightDiff, bishopDiff, rookDiff, queenDiff, label);
+	}
+
+	static PieceValues LearnPieceValues(List<TrainingSample> samples, int decisiveGames, PieceValues baseline)
+	{
+		if (samples.Count == 0 || decisiveGames < 2)
 		{
-			return captures[random.Next(captures.Count)];
+			return baseline;
 		}
 
-		return moves[random.Next(moves.Length)];
+		double pawnW = LearnWeight(samples, s => s.PawnDiff);
+		double knightW = LearnWeight(samples, s => s.KnightDiff);
+		double bishopW = LearnWeight(samples, s => s.BishopDiff);
+		double rookW = LearnWeight(samples, s => s.RookDiff);
+		double queenW = LearnWeight(samples, s => s.QueenDiff);
+
+		double pawnScale = Math.Abs(pawnW) < 1e-8 ? 0 : 100.0 / Math.Abs(pawnW);
+		if (pawnScale == 0)
+		{
+			return baseline;
+		}
+
+		int pawn = (int)Math.Round(Math.Abs(pawnW) * pawnScale);
+		int knight = (int)Math.Round(Math.Abs(knightW) * pawnScale);
+		int bishop = (int)Math.Round(Math.Abs(bishopW) * pawnScale);
+		int rook = (int)Math.Round(Math.Abs(rookW) * pawnScale);
+		int queen = (int)Math.Round(Math.Abs(queenW) * pawnScale);
+
+		if (knight == 0 || bishop == 0 || rook == 0 || queen == 0)
+		{
+			return baseline;
+		}
+
+		double confidence = Math.Clamp(decisiveGames / (double)(decisiveGames + 20), 0.05, 0.75);
+		int blendedPawn = Blend(baseline.PawnValue, pawn, confidence);
+		int blendedKnight = Blend(baseline.KnightValue, knight, confidence);
+		int blendedBishop = Blend(baseline.BishopValue, bishop, confidence);
+		int blendedRook = Blend(baseline.RookValue, rook, confidence);
+		int blendedQueen = Blend(baseline.QueenValue, queen, confidence);
+
+		blendedPawn = ClampDelta(blendedPawn, baseline.PawnValue, 20);
+		blendedKnight = ClampDelta(blendedKnight, baseline.KnightValue, 45);
+		blendedBishop = ClampDelta(blendedBishop, baseline.BishopValue, 45);
+		blendedRook = ClampDelta(blendedRook, baseline.RookValue, 60);
+		blendedQueen = ClampDelta(blendedQueen, baseline.QueenValue, 90);
+
+		return new PieceValues(blendedPawn, blendedKnight, blendedBishop, blendedRook, blendedQueen);
+	}
+
+	static int Blend(int baseline, int candidate, double confidence)
+	{
+		return (int)Math.Round(baseline + ((candidate - baseline) * confidence));
+	}
+
+	static int ClampDelta(int value, int baseline, int maxDelta)
+	{
+		return Math.Clamp(value, baseline - maxDelta, baseline + maxDelta);
+	}
+
+	static double LearnWeight(List<TrainingSample> samples, Func<TrainingSample, int> selector)
+	{
+		double numerator = 0;
+		double denominator = 0;
+
+		foreach (TrainingSample sample in samples)
+		{
+			int feature = selector(sample);
+			numerator += feature * sample.Label;
+			denominator += feature * feature;
+		}
+
+		if (Math.Abs(denominator) < 1e-8)
+		{
+			return 0;
+		}
+
+		return numerator / denominator;
 	}
 
 	static double GetLabel(GameResult result)
@@ -122,5 +238,25 @@ public class Trainer
 			return -1;
 		}
 		return 0;
+	}
+
+	readonly struct TrainingSample
+	{
+		public TrainingSample(int pawnDiff, int knightDiff, int bishopDiff, int rookDiff, int queenDiff, double label)
+		{
+			PawnDiff = pawnDiff;
+			KnightDiff = knightDiff;
+			BishopDiff = bishopDiff;
+			RookDiff = rookDiff;
+			QueenDiff = queenDiff;
+			Label = label;
+		}
+
+		public int PawnDiff { get; }
+		public int KnightDiff { get; }
+		public int BishopDiff { get; }
+		public int RookDiff { get; }
+		public int QueenDiff { get; }
+		public double Label { get; }
 	}
 }
