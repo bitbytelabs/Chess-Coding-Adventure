@@ -4,6 +4,33 @@ Version 2.0 of the Glowing Jellyfish. Good at beating up humans (~2600 on [liche
 
 Note: this is the UCI version of the program, which does not have a graphical interface. The UCI implementation is also very barebones -- I just did the minimum to get it up and running on lichess.
 
+## Build
+
+### Prerequisites
+- [.NET 6 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/6.0)
+
+### Build from the repository root
+```bash
+dotnet restore Glowing-Jellyfish.sln
+dotnet build Glowing-Jellyfish.sln -c Release
+```
+
+## Run
+
+Run the UCI engine from the repository root:
+
+```bash
+dotnet run --project Glowing-Jellyfish/Glowing-Jellyfish.csproj -c Release
+```
+
+The engine reads UCI commands from standard input. For a quick smoke test, send `quit`:
+
+```bash
+printf 'quit\n' | dotnet run --project Glowing-Jellyfish/Glowing-Jellyfish.csproj -c Release
+```
+
+You can use it directly in a UCI GUI like Arena, Cute Chess, or Banksia by pointing the GUI to the built executable.
+
 ## Training / Improving the engine
 
 This project is a classic handcrafted chess engine, not a neural-network model. The `train` command here generates self-play data; it does not perform neural-network optimization.
