@@ -387,6 +387,10 @@ FodyWeavers.xsd
 # Local History for Visual Studio Code
 .history/
 
+# Engine training output
+Glowing-Jellyfish/resources/training/training-data.csv
+Glowing-Jellyfish/resources/training/trained-piece-values.txt
+
 # Windows Installer files from build outputs
 *.cab
 *.msi

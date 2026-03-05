@@ -1,5 +1,0 @@
-pawn=100
-knight=180
-bishop=194
-rook=338
-queen=518
