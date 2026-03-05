@@ -1,0 +1,122 @@
+name: Hourly Version Release
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  version-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version from commit messages
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch --tags --force
+
+          if git tag --points-at HEAD | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "HEAD is already tagged with a semantic version."
+            echo "create_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          latest_tag="$(git tag --list 'v*' --sort=-v:refname | head -n 1 || true)"
+          if [[ -z "$latest_tag" ]]; then
+            latest_tag="v0.0.0"
+            range="HEAD"
+          else
+            range="${latest_tag}..HEAD"
+          fi
+
+          if [[ "$range" == "HEAD" ]]; then
+            commit_subjects="$(git log --format=%s -n 200)"
+            commit_bodies="$(git log --format=%b -n 200)"
+          else
+            commit_subjects="$(git log --format=%s "$range")"
+            commit_bodies="$(git log --format=%b "$range")"
+          fi
+
+          if [[ -z "${commit_subjects//$'\n'/}" ]]; then
+            echo "No commits since last version tag."
+            echo "create_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          bump="none"
+
+          if printf '%s\n' "$commit_subjects" | grep -Eq '(^| )feat!(\(.+\))?: '; then
+            bump="major"
+          elif printf '%s\n' "$commit_bodies" | grep -Eq 'BREAKING CHANGE:'; then
+            bump="major"
+          elif printf '%s\n' "$commit_subjects" | grep -Eq '(^| )feat(\(.+\))?: '; then
+            bump="minor"
+          elif printf '%s\n' "$commit_subjects" | grep -Eq '(^| )fix(\(.+\))?: '; then
+            bump="patch"
+          fi
+
+          if [[ "$bump" == "none" ]]; then
+            echo "No versionable commits (fix/feat/feat!) since last tag."
+            echo "create_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          raw_version="${latest_tag#v}"
+          IFS='.' read -r major minor patch <<< "$raw_version"
+
+          case "$bump" in
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            patch)
+              patch=$((patch + 1))
+              ;;
+          esac
+
+          new_tag="v${major}.${minor}.${patch}"
+
+          echo "latest_tag=$latest_tag" >> "$GITHUB_OUTPUT"
+          echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
+          echo "create_release=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        if: steps.version.outputs.create_release == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.version.outputs.new_tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "$tag"
+
+      - name: Create GitHub release
+        if: steps.version.outputs.create_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.new_tag }}
+          name: ${{ steps.version.outputs.new_tag }}
+          generate_release_notes: true
+          body: |
+            Automated hourly release.
+
+            Bump type: `${{ steps.version.outputs.bump }}`
+            Previous tag: `${{ steps.version.outputs.latest_tag }}`
