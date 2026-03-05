@@ -17,16 +17,18 @@ dotnet build Glowing-Jellyfish.sln -c Release
 
 ## Run
 
-Run the UCI engine from the repository root:
+After `dotnet build`, run the application that was produced by the build output.
+
+From the repository root, that is:
 
 ```bash
-dotnet run --project Glowing-Jellyfish/Glowing-Jellyfish.csproj -c Release
+dotnet ./Glowing-Jellyfish/bin/Release/net6.0/Glowing-Jellyfish.dll
 ```
 
 The engine reads UCI commands from standard input. For a quick smoke test, send `quit`:
 
 ```bash
-printf 'quit\n' | dotnet run --project Glowing-Jellyfish/Glowing-Jellyfish.csproj -c Release
+printf 'quit\n' | dotnet ./Glowing-Jellyfish/bin/Release/net6.0/Glowing-Jellyfish.dll
 ```
 
 You can use it directly in a UCI GUI like Arena, Cute Chess, or Banksia by pointing the GUI to the built executable.
