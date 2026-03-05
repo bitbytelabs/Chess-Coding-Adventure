@@ -31,6 +31,9 @@ public class EngineUCI
 			case "train":
 				ProcessTrainCommand(message);
 				break;
+			case "weights":
+				ProcessWeightsCommand();
+				break;
 			case "uci":
 				Respond("uciok");
 				break;
@@ -72,10 +75,17 @@ public class EngineUCI
 
 		Respond($"info string training started (games={gameCount}, maxPly={maxPly})");
 		TrainingSummary summary = player.Train(gameCount, maxPly, Bot.GetTrainingOutputDirectory());
-		Respond($"info string training finished (samples={summary.SampleCount}, whiteWins={summary.WhiteWins}, blackWins={summary.BlackWins}, draws={summary.Draws})");
+		Respond($"info string training finished (samples={summary.SampleCount}, whiteWins={summary.WhiteWins}, blackWins={summary.BlackWins}, draws={summary.Draws}, decisiveGames={summary.DecisiveGames})");
 		Respond($"info string training data saved to {summary.OutputPath}");
 		Respond($"info string updated piece values pawn={summary.TrainedValues.PawnValue} knight={summary.TrainedValues.KnightValue} bishop={summary.TrainedValues.BishopValue} rook={summary.TrainedValues.RookValue} queen={summary.TrainedValues.QueenValue}");
 		Respond($"info string evaluation weights saved to {summary.WeightsPath}");
+	}
+
+	void ProcessWeightsCommand()
+	{
+		PieceValues values = EvaluationTuning.Current;
+		Respond($"info string current piece values pawn={values.PawnValue} knight={values.KnightValue} bishop={values.BishopValue} rook={values.RookValue} queen={values.QueenValue}");
+		Respond($"info string weights file {Bot.GetWeightsPath(Bot.GetTrainingOutputDirectory())}");
 	}
 
 	static int ParsePositiveInt(string[] parts, int index, int defaultValue)
