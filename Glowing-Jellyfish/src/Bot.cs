@@ -35,6 +35,8 @@ public class Bot
 
 	public Bot()
 	{
+		EvaluationTuning.Load(GetWeightsPath());
+
 		board = Board.CreateBoard();
 		searcher = new Searcher(board);
 		searcher.OnSearchComplete += OnSearchComplete;
@@ -87,6 +89,17 @@ public class Bot
 	{
 		Trainer trainer = new();
 		return trainer.GenerateSelfPlayData(gameCount, maxPly, outputDirectory);
+	}
+
+	public static string GetWeightsPath(string rootDirectory)
+	{
+		return Path.Combine(rootDirectory, "trained-piece-values.txt");
+	}
+
+	static string GetWeightsPath()
+	{
+		string dir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+		return GetWeightsPath(Path.Combine(dir, "Glowing-Jellyfish"));
 	}
 
 	public void ThinkTimed(int timeMs)

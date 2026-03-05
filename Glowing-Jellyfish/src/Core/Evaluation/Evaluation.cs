@@ -3,17 +3,17 @@
 	public class Evaluation
 	{
 
-		public const int PawnValue = 100;
-		public const int KnightValue = 300;
-		public const int BishopValue = 320;
-		public const int RookValue = 500;
-		public const int QueenValue = 900;
+		public static int PawnValue => EvaluationTuning.Current.PawnValue;
+		public static int KnightValue => EvaluationTuning.Current.KnightValue;
+		public static int BishopValue => EvaluationTuning.Current.BishopValue;
+		public static int RookValue => EvaluationTuning.Current.RookValue;
+		public static int QueenValue => EvaluationTuning.Current.QueenValue;
 
 		static readonly int[] passedPawnBonuses = { 0, 120, 80, 50, 30, 15, 15 };
 		static readonly int[] isolatedPawnPenaltyByCount = { 0, -10, -25, -50, -75, -75, -75, -75, -75 };
 		static readonly int[] kingPawnShieldScores = { 4, 7, 4, 3, 6, 3 };
 
-		const float endgameMaterialStart = RookValue * 2 + BishopValue + KnightValue;
+		float endgameMaterialStart => RookValue * 2 + BishopValue + KnightValue;
 		Board board;
 
 		public EvaluationData whiteEval;
@@ -172,7 +172,7 @@
 
 		float EndgamePhaseWeight(int materialCountWithoutPawns)
 		{
-			const float multiplier = 1 / endgameMaterialStart;
+			float multiplier = 1 / endgameMaterialStart;
 			return 1 - System.Math.Min(1, materialCountWithoutPawns * multiplier);
 		}
 
