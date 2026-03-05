@@ -35,7 +35,7 @@ public class Bot
 
 	public Bot()
 	{
-		EvaluationTuning.Load(GetWeightsPath());
+		LoadEvaluationWeights();
 
 		board = Board.CreateBoard();
 		searcher = new Searcher(board);
@@ -96,10 +96,47 @@ public class Bot
 		return Path.Combine(rootDirectory, "trained-piece-values.txt");
 	}
 
+	public static string GetTrainingOutputDirectory()
+	{
+		string repositoryRoot = GetRepositoryRootDirectory();
+		return Path.Combine(repositoryRoot, "Glowing-Jellyfish", "resources", "training");
+	}
+
+	public static string GetRepositoryRootDirectory()
+	{
+		string currentDirectory = Directory.GetCurrentDirectory();
+		DirectoryInfo? directory = new(currentDirectory);
+
+		while (directory != null)
+		{
+			string solutionPath = Path.Combine(directory.FullName, "Glowing-Jellyfish.sln");
+			if (File.Exists(solutionPath))
+			{
+				return directory.FullName;
+			}
+
+			directory = directory.Parent;
+		}
+
+		return currentDirectory;
+	}
+
 	static string GetWeightsPath()
 	{
 		string dir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 		return GetWeightsPath(Path.Combine(dir, "Glowing-Jellyfish"));
+	}
+
+	void LoadEvaluationWeights()
+	{
+		string repositoryWeightsPath = GetWeightsPath(GetTrainingOutputDirectory());
+		if (File.Exists(repositoryWeightsPath))
+		{
+			EvaluationTuning.Load(repositoryWeightsPath);
+			return;
+		}
+
+		EvaluationTuning.Load(GetWeightsPath());
 	}
 
 	public void ThinkTimed(int timeMs)

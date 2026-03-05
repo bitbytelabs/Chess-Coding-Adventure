@@ -59,5 +59,5 @@ You can now also generate self-play data and automatically tune piece values dir
 
 - Run the engine
 - Type `train` (or `train <games> <maxPly>`, for example `train 25 160`)
-- The engine will create a `training-data.csv` file in its app-data directory containing `fen,result` samples (`1` white win, `0` draw, `-1` black win).
-- It will also update and save `trained-piece-values.txt` in the same directory; these weights are loaded automatically on startup and used by search/evaluation.
+- The engine will create a `training-data.csv` file in the repository under `Glowing-Jellyfish/resources/training/` containing `fen,result` samples (`1` white win, `0` draw, `-1` black win).
+- It will also update and save `trained-piece-values.txt` in that same repository folder; these weights are loaded automatically on startup and used by search/evaluation.
